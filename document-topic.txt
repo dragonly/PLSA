@@ -1,0 +1,39 @@
+Document 0:
+	topic1 : 0.980428598391
+	topic0 : 0.019571401609
+Document 1:
+	topic1 : 0.651707305338
+	topic0 : 0.348292694662
+Document 2:
+	topic1 : 0.988667007955
+	topic0 : 0.0113329920453
+Document 3:
+	topic0 : 0.997621987906
+	topic1 : 0.00237801209442
+Document 4:
+	topic1 : 0.999797775671
+	topic0 : 0.000202224329243
+Document 5:
+	topic0 : 0.836137134523
+	topic1 : 0.163862865477
+Document 6:
+	topic1 : 0.999999975293
+	topic0 : 2.4707235657e-08
+Document 7:
+	topic0 : 0.994318366901
+	topic1 : 0.0056816330991
+Document 8:
+	topic0 : 0.778313920045
+	topic1 : 0.221686079955
+Document 9:
+	topic1 : 0.574629630768
+	topic0 : 0.425370369232
+Document 10:
+	topic1 : 0.999996558824
+	topic0 : 3.44117598447e-06
+Document 11:
+	topic0 : 0.999767197111
+	topic1 : 0.000232802888966
+Document 12:
+	topic0 : 0.999999919914
+	topic1 : 8.00862755471e-08

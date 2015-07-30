@@ -3,11 +3,18 @@ import numpy as np
 from utils import normalize
 
 """
-Author: 
+Author:
 Alex Kong (https://github.com/hitalex)
 
 Reference:
 http://blog.tomtung.com/2011/10/plsa
+
+Author:
+    dragonly<liyilongko@163.com> (https://github.com/dragonly)
+Contribution:
+    Optimized EM algorithm(actually rewritten).
+    Instead of using several nested loops in python code, I reimplemented them using
+    matrix operations using numpy library functions, which is implemented in C code.
 """
 
 np.set_printoptions(threshold='nan')
@@ -52,7 +59,7 @@ class Document(object):
             self.lines = [line for line in self.file]
         finally:
             self.file.close()
-            
+
         for line in self.lines:
             words = line.split(' ')
             for word in words:
@@ -85,7 +92,11 @@ class Corpus(object):
         Initialize empty document list.
         '''
         self.documents = []
+        self.word_count = 0
 
+        self.priori = []
+        # pseudo document size
+        self.priori_weight = 0
 
     def add_document(self, document):
         '''
@@ -98,15 +109,33 @@ class Corpus(object):
         '''
         Construct a list of unique words in the corpus.
         '''
-        # ** ADD ** #
-        # exclude words that appear in 90%+ of the documents
-        # exclude words that are too (in)frequent
         discrete_set = set()
         for document in self.documents:
             for word in document.words:
                 discrete_set.add(word)
+                self.word_count += 1
+
         self.vocabulary = list(discrete_set)
-        
+
+
+    def read_priori(self, filename='priori.conf'):
+        with open(filename, 'r') as fd:
+            self.priori_weight = int(fd.readline().strip('\n'))
+            for line in fd.readlines():
+                line = line.strip('\n')
+                tmp = line.split(',')zxcg
+                topic_priori = np.zeros(len(self.vocabulary))
+                for pair in tmp:
+                    word, count = pair.split(':')
+                    word = word.strip()
+                    count = int(count)
+                    # WARNNING: cannot add non-exist word into vocabulary!!!
+                    if word in self.vocabulary:
+                        index = self.vocabulary.index(word)
+                        topic_priori[index] = count
+                normalize(topic_priori)
+                self.priori.append(topic_priori)
+            self.priori = np.array(self.priori)
 
 
     def plsa(self, number_of_topics, max_iter):
@@ -115,25 +144,28 @@ class Corpus(object):
         Model topics.
         '''
         print "EM iteration begins..."
-        # Get vocabulary and number of documents.
-        self.build_vocabulary()
+
+        self.read_priori()
+        if self.priori_weight != 0:
+            assert(len(self.priori) == number_of_topics)
+
         number_of_documents = len(self.documents)
         vocabulary_size = len(self.vocabulary)
-        
+
         # build term-doc matrix
         term_doc_matrix = np.zeros([number_of_documents, vocabulary_size], dtype = np.int)
+        word_index_map = {v:k for k,v in enumerate(self.vocabulary)}
         for d_index, doc in enumerate(self.documents):
-            term_count = np.zeros(vocabulary_size, dtype = np.int)
             for word in doc.words:
-                if word in self.vocabulary:
-                    w_index = self.vocabulary.index(word)
-                    term_count[w_index] = term_count[w_index] + 1
-            term_doc_matrix[d_index] = term_count
+                #if word in self.vocabulary:
+# WARNNING: search for word in self.vocabulary is tooooooo SLOW, maybe because it's O(n) operation
+                w_index = word_index_map[word]
+                term_doc_matrix[d_index][w_index] += 1
 
         # Create the counter arrays.
         self.document_topic_prob = np.zeros([number_of_documents, number_of_topics], dtype=np.float) # P(z | d)
-        self.topic_word_prob = np.zeros([number_of_topics, len(self.vocabulary)], dtype=np.float) # P(w | z)
-        self.topic_prob = np.zeros([number_of_documents, len(self.vocabulary), number_of_topics], dtype=np.float) # P(z | d, w)
+        self.topic_word_prob = np.zeros([number_of_topics, vocabulary_size], dtype=np.float) # P(w | z)
+        self.topic_prob = np.zeros([number_of_documents, vocabulary_size, number_of_topics], dtype=np.float) # P(z | d, w)
 
         # Initialize
         print "Initializing..."
@@ -141,68 +173,59 @@ class Corpus(object):
         self.document_topic_prob = np.random.random(size = (number_of_documents, number_of_topics))
         for d_index in range(len(self.documents)):
             normalize(self.document_topic_prob[d_index]) # normalize for each document
-        self.topic_word_prob = np.random.random(size = (number_of_topics, len(self.vocabulary)))
+        self.topic_word_prob = np.random.random(size = (number_of_topics, vocabulary_size))
         for z in range(number_of_topics):
             normalize(self.topic_word_prob[z]) # normalize for each topic
-        """  
-        # for test, fixed values are assigned, where number_of_documents = 3, vocabulary_size = 15
-        self.document_topic_prob = np.array(
-        [[ 0.19893833,  0.09744287,  0.12717068,  0.23964181,  0.33680632],
-         [ 0.27681925,  0.22971358,  0.1704416,   0.18248461,  0.14054095],
-         [ 0.24768207,  0.25136754,  0.14392363,  0.14573845,  0.21128831]])
-
-        self.topic_word_prob = np.array(
-      [[ 0.02963563,  0.11659963,  0.06415405,  0.1291839 ,  0.09377842,
-         0.09317023,  0.06140873,  0.023314  ,  0.09486251,  0.01538988,
-         0.09189075,  0.06957687,  0.05015957,  0.05281074,  0.0140651 ],
-       [ 0.09746902,  0.12212085,  0.07635703,  0.02799546,  0.0282282 ,
-         0.03685356,  0.01256655,  0.03931912,  0.09545668,  0.00928434,
-         0.11392475,  0.12089124,  0.02674909,  0.07219077,  0.12059333],
-       [ 0.02209806,  0.05870101,  0.12101806,  0.03733935,  0.02550749,
-         0.09906735,  0.0706651 ,  0.05619682,  0.10672434,  0.12259672,
-         0.04218994,  0.10505831,  0.00315489,  0.03286002,  0.09682255],
-       [ 0.0428768 ,  0.11598272,  0.08636138,  0.10917224,  0.05061344,
-         0.09974595,  0.01647265,  0.06376147,  0.04468468,  0.01986342,
-         0.10286377,  0.0117712 ,  0.08350884,  0.049046  ,  0.10327543],
-       [ 0.02555784,  0.03718368,  0.10109439,  0.02481489,  0.0208068 ,
-         0.03544246,  0.11515259,  0.06506528,  0.12720479,  0.07616499,
-         0.11286584,  0.06550869,  0.0653802 ,  0.0157582 ,  0.11199935]])
-        """
         # Run the EM algorithm
         for iteration in range(max_iter):
             print "Iteration #" + str(iteration + 1) + "..."
             print "E step:"
-            for d_index, document in enumerate(self.documents):
-                for w_index in range(vocabulary_size):
-                    prob = self.document_topic_prob[d_index, :] * self.topic_word_prob[:, w_index]
-                    if sum(prob) == 0.0:
-                        print "d_index = " + str(d_index) + ",  w_index = " + str(w_index)
-                        print "self.document_topic_prob[d_index, :] = " + str(self.document_topic_prob[d_index, :])
-                        print "self.topic_word_prob[:, w_index] = " + str(self.topic_word_prob[:, w_index])
-                        print "topic_prob[d_index][w_index] = " + str(prob)
-                        exit(0)
-                    else:
-                        normalize(prob)
-                    self.topic_prob[d_index][w_index] = prob
+
+            A = np.zeros([number_of_documents, 1])
+            B = np.zeros([1, vocabulary_size])
+            for z in range(number_of_topics):
+                A[:,0] = self.document_topic_prob[:,z]
+                A_stacked = np.hstack([A]*vocabulary_size)
+                B[0,:] = self.topic_word_prob[z,:]
+                B_stacked = np.vstack([B]*number_of_documents)
+                self.topic_prob[:,:,z] = A_stacked * B_stacked
+            sum_z = np.sum(self.topic_prob, axis=2)
+            sum_z = np.dstack([sum_z]*number_of_topics)
+            self.topic_prob[:,:,:] /= sum_z
+
             print "M step:"
             # update P(w | z)
-            for z in range(number_of_topics):
-                for w_index in range(vocabulary_size):
-                    s = 0
-                    for d_index in range(len(self.documents)):
-                        count = term_doc_matrix[d_index][w_index]
-                        s = s + count * self.topic_prob[d_index, w_index, z]
-                    self.topic_word_prob[z][w_index] = s
-                normalize(self.topic_word_prob[z])
-            
+            self.topic_word_prob = np.zeros(np.ma.shape(self.topic_word_prob))
+            A = np.zeros([1,vocabulary_size])
+            for d in range(number_of_documents):
+                A[0,:] = term_doc_matrix[d, :]
+                A_stacked = np.vstack([A]*number_of_topics)
+                B = self.topic_prob[d, :, :]
+                B = B.T
+                self.topic_word_prob[:,:] += (A_stacked * B)
+
+            sum_w = np.zeros([number_of_topics, 1])
+            sum_w[:,0] = np.sum(self.topic_word_prob, axis=1)
+            # print sum_w
+            sum_w = np.hstack([sum_w]*vocabulary_size)
+            if self.priori_weight != 0:
+                sum_w += self.priori_weight
+                self.topic_word_prob[:,:] += self.priori_weight*self.priori
+            self.topic_word_prob[:,:] /= sum_w
+
             # update P(z | d)
-            for d_index in range(len(self.documents)):
-                for z in range(number_of_topics):
-                    s = 0
-                    for w_index in range(vocabulary_size):
-                        count = term_doc_matrix[d_index][w_index]
-                        s = s + count * self.topic_prob[d_index, w_index, z]
-                    self.document_topic_prob[d_index][z] = s
-#                print self.document_topic_prob[d_index]
-#                assert(sum(self.document_topic_prob[d_index]) != 0)
-                normalize(self.document_topic_prob[d_index])
+
+            self.document_topic_prob = np.zeros(np.ma.shape(self.document_topic_prob))
+            A = np.zeros([number_of_documents,1])
+            for w in range(vocabulary_size):
+                A[:,0] = term_doc_matrix[:, w]
+                A_stacked = np.hstack([A]*number_of_topics)
+                B = self.topic_prob[:,w,:]
+                self.document_topic_prob[:,:] += A_stacked * B
+
+            sum_zd = np.zeros([number_of_documents, 1])
+            sum_zd[:,0] = np.sum(self.document_topic_prob, axis=1)
+            sum_zd = np.hstack([sum_zd]*number_of_topics)
+            self.document_topic_prob[:,:] /= sum_zd
+
+# TODO: add computation for posteriori after each iteration
