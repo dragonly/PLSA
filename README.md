@@ -16,5 +16,5 @@ if the pseudo count (first line of the `priori.conf` is 0, then you're running a
 
 ## Instructions
 ```python
-dragonly@Dragonly:~/path/to/plsa$ python main.py <number_of_topics> <number_of_iterations>
+python main.py <number_of_topics> <number_of_iterations>
 ```
